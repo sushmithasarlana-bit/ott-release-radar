@@ -1,0 +1,8 @@
+{
+  "viewerName": "Naman",
+  "region": "IN",
+  "platforms": ["Netflix", "Prime Video", "JioHotstar"],
+  "languages": ["hi", "en", "ta"],
+  "genres": ["thriller", "sci-fi", "indie drama", "horror", "comedy"],
+  "lookbackDays": 7
+}

@@ -1,0 +1,65 @@
+/* Cinematic dark theme. All colours are tokens so components stay consistent. */
+:root {
+  --bg: #07080b;
+  --bg-raised: #0f1116;
+  --surface: #14171e;
+  --surface-2: #1b1f28;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #f2f3f5;
+  --text-2: #b7bcc6;
+  --text-3: #8a909c;
+  --gold: #f5c518;
+  --gold-soft: rgba(245, 197, 24, 0.14);
+  --watch: #3ddc84;
+  --watch-soft: rgba(61, 220, 132, 0.14);
+  --skip: #ff6b6b;
+  --skip-soft: rgba(255, 107, 107, 0.12);
+  --focus: #8ab4ff;
+  --radius: 16px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  color-scheme: dark;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(245, 197, 24, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(80, 120, 255, 0.07), transparent 60%),
+    var(--bg);
+  font-family: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
