@@ -2,7 +2,7 @@
 // which platform, since when, and where to tap".
 import { PLATFORMS, isSelectedPlatform, type PlatformId } from "../config";
 import { env } from "../env";
-import { getJson } from "../http";
+import { ApiError, getJson, type JsonResponse } from "../http";
 
 const HOST = "streaming-availability.p.rapidapi.com";
 
@@ -89,9 +89,7 @@ export async function fetchChangePages(
       order_direction: "desc",
     });
     if (cursor) params.set("cursor", cursor);
-    const { data, headers } = await getJson<SaChangesPage>("Streaming Availability", `https://${HOST}/changes?${params}`, {
-      headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": HOST },
-    });
+    const { data, headers } = await getWithRetry(`https://${HOST}/changes?${params}`, key);
     out.requests++;
     out.quotaRemaining = headerNumber(headers, "x-ratelimit-api-request-remaining");
     out.quotaLimit = headerNumber(headers, "x-ratelimit-api-request-limit");
@@ -102,6 +100,20 @@ export async function fetchChangePages(
 
   out.capped = cursor !== null;
   return out;
+}
+
+// From Vercel's shared servers, RapidAPI sometimes answers 429 "Too many requests"
+// even though the monthly quota is fine (seen on the first deploy). Wait and retry.
+async function getWithRetry(url: string, key: string): Promise<JsonResponse<SaChangesPage>> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await getJson<SaChangesPage>("Streaming Availability", url, { headers: { "X-RapidAPI-Key": key, "X-RapidAPI-Host": HOST } });
+    } catch (err) {
+      const retryable = err instanceof ApiError && (err.status === null || err.status === 429 || err.status >= 500);
+      if (!retryable || attempt === 3) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt)); // 1.5 s, 3 s, 6 s
+    }
+  }
 }
 
 // Keep only the fields we use, so the saved week stays small.

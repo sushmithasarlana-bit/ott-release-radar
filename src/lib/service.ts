@@ -11,6 +11,7 @@ const LOCK_KEY = "pipeline-lock";
 const LAST_FRIDAY_KEY = "last-friday-digest";
 // Repeated clicks within this time reuse the last run (saves RapidAPI + Gemini quota).
 export const CACHE_FRESH_SECONDS = 6 * 3600;
+const DEGRADED_FRESH_SECONDS = 30 * 60;
 const LOCK_SECONDS = 280; // a little under Vercel's 300 s limit
 const IST_OFFSET = 5.5 * 3600;
 
@@ -30,7 +31,10 @@ export async function getDigest(
 ): Promise<{ data: DigestData; source: DigestSource }> {
   const now = () => Math.floor(Date.now() / 1000);
   const cached = await getCachedDigest(store);
-  const cacheUsable = cached && cached.prefsVersion === PREFS_VERSION && now() - cached.generatedAt < opts.maxAgeSeconds;
+  // A run that had to fall back (limited data, no AI verdicts) is only reused briefly.
+  const degraded = cached && (cached.limitedData || cached.sources.gemini.status === "failed");
+  const maxAge = degraded ? Math.min(opts.maxAgeSeconds, DEGRADED_FRESH_SECONDS) : opts.maxAgeSeconds;
+  const cacheUsable = cached && cached.prefsVersion === PREFS_VERSION && now() - cached.generatedAt < maxAge;
   if (cacheUsable) return { data: cached, source: "cache" };
 
   if (await store.setIfAbsent(LOCK_KEY, now(), LOCK_SECONDS)) {

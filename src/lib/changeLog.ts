@@ -69,13 +69,12 @@ export async function syncChangeLog(store: Store, nowUnix: number): Promise<Sync
     (s) => s.platforms.length > 0,
   );
 
-  // Fetch in parallel, then merge one after another.
-  const fetched = await Promise.all(
-    streams.map(async (stream) => {
-      const from = Math.max(windowStart, (log.newest[stream.id] ?? 0) - OVERLAP_SECONDS);
-      return { stream, from, pages: await fetchChangePages(stream.itemType, stream.platforms, from, stream.maxPages) };
-    }),
-  );
+  // One stream at a time: parallel bursts got "429 Too many requests" from Vercel.
+  const fetched = [];
+  for (const stream of streams) {
+    const from = Math.max(windowStart, (log.newest[stream.id] ?? 0) - OVERLAP_SECONDS);
+    fetched.push({ stream, from, pages: await fetchChangePages(stream.itemType, stream.platforms, from, stream.maxPages) });
+  }
 
   for (const { stream, from, pages } of fetched) {
     result.requests += pages.requests;
