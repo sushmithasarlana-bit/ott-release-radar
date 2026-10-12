@@ -10,9 +10,11 @@ import { ApiError, getJson } from "../http";
 // the main model fails.
 export const GEMINI_MODELS = ["google/gemini-3.7-flash", "google/gemini-3.5-flash"] as const;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const TIMEOUT_MS = 60_000;
-// Safety limit so one call stays fast; a normal week has ~20-50 titles.
-export const MAX_TITLES_PER_CALL = 80;
+// Per model. 80 titles took ~50 s on 2026-10-12. Worst case (main times out,
+// backup runs) is 110 + 90 = 200 s, inside Vercel Hobby's 300 s limit.
+const TIMEOUT_MS = [110_000, 90_000];
+// Safety limit for one call (96 titles matched once horror + comedy were added).
+export const MAX_TITLES_PER_CALL = 120;
 
 export const NO_SYNOPSIS = "Synopsis unavailable";
 
@@ -89,7 +91,7 @@ interface OpenRouterResponse {
   error?: { message?: string; code?: number };
 }
 
-async function callModel(model: string, prompt: string): Promise<{ text: string; modelVersion: string }> {
+async function callModel(model: string, prompt: string, timeoutMs: number): Promise<{ text: string; modelVersion: string }> {
   const { data } = await getJson<OpenRouterResponse>(
     "Gemini",
     OPENROUTER_URL,
@@ -109,7 +111,7 @@ async function callModel(model: string, prompt: string): Promise<{ text: string;
         response_format: { type: "json_schema", json_schema: { name: "verdicts", strict: true, schema: RESPONSE_SCHEMA } },
       }),
     },
-    TIMEOUT_MS,
+    timeoutMs,
   );
   // OpenRouter can report a provider error inside a 200 response.
   if (data.error) throw new ApiError("Gemini", data.error.code ?? 200, `OpenRouter: ${data.error.message ?? "unknown error"}`);
@@ -176,7 +178,7 @@ export async function getVerdicts(titles: Enriched[], models: readonly string[] 
   const errors: string[] = [];
   for (const [i, model] of models.entries()) {
     try {
-      const { text, modelVersion } = await callModel(model, prompt);
+      const { text, modelVersion } = await callModel(model, prompt, TIMEOUT_MS[i] ?? TIMEOUT_MS.at(-1)!);
       run.verdicts = parseVerdicts(text, batch);
       run.model = modelVersion;
       run.usedBackup = i > 0;

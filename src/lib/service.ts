@@ -32,7 +32,8 @@ export async function getDigest(
   const now = () => Math.floor(Date.now() / 1000);
   const cached = await getCachedDigest(store);
   // A run that had to fall back (limited data, no AI verdicts) is only reused briefly.
-  const degraded = cached && (cached.limitedData || cached.sources.gemini.status === "failed");
+  const degraded =
+    cached && (cached.limitedData || cached.sources.gemini.status === "failed" || cached.titles.some((t) => t.verdict.verdict === null));
   const maxAge = degraded ? Math.min(opts.maxAgeSeconds, DEGRADED_FRESH_SECONDS) : opts.maxAgeSeconds;
   const cacheUsable = cached && cached.prefsVersion === PREFS_VERSION && now() - cached.generatedAt < maxAge;
   if (cacheUsable) return { data: cached, source: "cache" };

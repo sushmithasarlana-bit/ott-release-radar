@@ -7,7 +7,7 @@ import { loadChangeLog, syncChangeLog, type ChangeLog } from "./changeLog";
 import { PLATFORMS, PREFS, PREFS_VERSION } from "./config";
 import { enrichAndFilter } from "./enrich";
 import { ApiError } from "./http";
-import { getVerdicts, type Verdict } from "./sources/gemini";
+import { MAX_TITLES_PER_CALL, getVerdicts, type Verdict } from "./sources/gemini";
 import { discoverRecentTitles } from "./sources/tmdbDiscover";
 import type { Store } from "./store";
 
@@ -136,6 +136,8 @@ export async function runPipeline(store: Store, opts: PipelineOptions, nowUnix =
   // 3. Watch or skip (Gemini), one batched call.
   const gemini = await time("gemini", () => getVerdicts(kept));
   if (gemini.error) notes.push(`AI verdict unavailable: ${gemini.error}`);
+  if (kept.length > MAX_TITLES_PER_CALL)
+    notes.push(`${kept.length} titles matched, more than one AI call handles (${MAX_TITLES_PER_CALL}); the rest show "AI verdict unavailable".`);
   if (gemini.usedBackup) notes.push(`Main Gemini model failed; the backup model (${gemini.model}) answered.`);
 
   const titles: DigestTitle[] = kept.map((t) => ({
