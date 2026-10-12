@@ -1,8 +1,9 @@
 // One title as a poster card: platform badges, WATCH/SKIP, verified
 // availability date, runtime or episodes, genres and a short synopsis.
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import type { DigestTitle } from "@/lib/pipeline";
 import styles from "./page.module.css";
+import { HeartIcon } from "./WatchNext";
 
 export const LANGUAGE_NAMES: Record<string, string> = { hi: "Hindi", en: "English", ta: "Tamil" };
 
@@ -31,7 +32,18 @@ export function PlatformBadge({ platform, name }: { platform: string; name: stri
   );
 }
 
-export default function TitleCard({ t, limitedData, index }: { t: DigestTitle; limitedData: boolean; index: number }) {
+interface CardProps {
+  t: DigestTitle;
+  limitedData: boolean;
+  index: number;
+  hearted: boolean;
+  /** Called with the heart's on-screen centre (for the confetti). Returns true if the title was added. */
+  onHeart: (t: DigestTitle, x: number, y: number) => boolean;
+}
+
+export default function TitleCard({ t, limitedData, index, hearted, onHeart }: CardProps) {
+  // Bumped on every add; used as a key so the "pop" animation replays each time.
+  const [popKey, setPopKey] = useState(0);
   const v = t.verdict.verdict;
   const verdictClass = v === "WATCH" ? styles.isWatch : v === "SKIP" ? styles.isSkip : styles.isUnknown;
   const watchLink = t.platforms.find((p) => p.link);
@@ -57,6 +69,21 @@ export default function TitleCard({ t, limitedData, index }: { t: DigestTitle; l
             <PlatformBadge key={p.platform} platform={p.platform} name={p.name} />
           ))}
         </div>
+        <button
+          type="button"
+          className={`${styles.heartBtn} ${hearted ? styles.hearted : ""}`}
+          aria-pressed={hearted}
+          aria-label={hearted ? `Remove ${t.title} from Watch Next` : `Add ${t.title} to Watch Next`}
+          title={hearted ? "In your Watch Next list" : "Add to Watch Next"}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            if (onHeart(t, r.left + r.width / 2, r.top + r.height / 2)) setPopKey((k) => k + 1);
+          }}
+        >
+          <span key={popKey} className={popKey && hearted ? styles.heartPop : undefined}>
+            <HeartIcon filled={hearted} />
+          </span>
+        </button>
         {t.kind === "newSeason" && <span className={styles.ribbon}>📺 New Season</span>}
         <div className={styles.verdictPill} aria-label={v ? `${v}, ${t.verdict.score} out of 10` : "AI verdict unavailable"}>
           {v ? (

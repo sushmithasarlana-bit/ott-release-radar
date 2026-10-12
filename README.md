@@ -33,12 +33,17 @@ No account, keys or setup needed. Everything below works from any browser, inclu
      - the **verified “On ⟨platform⟩ since ⟨date⟩”**,
      - a 2-line synopsis and Gemini’s reason,
      - a link to the title on the platform.
-   - The **“Telegram preview”** tab shows the digest exactly as it is posted to Telegram.
 
-4. **Click “Send test digest to Telegram”** and enter the **demo password** (shared with you separately).
+4. **Build a Watch Next list.**
+   - Tap the **♥** on any poster. The heart pops, confetti bursts, and the **Watch Next** box in the top-right corner glows and counts up.
+   - Open the box, then pick one **🎬 Final watch** and one **⏭ Next watch** from your shortlist.
+   - You can swap the picks, clear them, remove titles, or clear the whole list.
+   - The list is saved in your browser, so it survives reloads and next week’s refresh.
+
+5. **Click “Send test digest to Telegram”** and enter the **demo password** (shared with you separately).
    The digest is posted to the Telegram channel with a **“[TEST]”** header. Test sends never count as the Friday digest.
 
-5. **Scroll to “Behind the scenes”.** It shows:
+6. **Scroll to “Behind the scenes”.** It shows:
    - the last run’s count at every filter step,
    - which data source was used and whether each API worked,
    - RapidAPI requests left this month and the time each step took,
@@ -104,6 +109,7 @@ flowchart LR
 | **Telegram** | Delivery (HTML, link previews off, split under 4,096 chars) | `src/lib/sources/telegram.ts`, `src/lib/digest.ts` |
 | **Pipeline** | Ties it together and records counts, sources, notes and timings | `src/lib/pipeline.ts` |
 | **Web page** | Test page (server-rendered shell + interactive client) | `src/app/` |
+| **Watch Next** | Per-browser shortlist with Final / Next picks, saved in `localStorage` | `src/app/WatchNext.tsx`, `src/app/watchNextStore.ts` |
 
 ### The pipeline, step by step
 
@@ -222,6 +228,7 @@ node --env-file=.env.local scripts/check-secrets.mjs            # run before eve
 - **Multiple users** or editing preferences from the web page. Preferences are a file in the repo.
 - **Interacting with the bot in Telegram** (commands, replies). The bot only posts.
 - **Exact delivery at 18:00.** See the limitations below.
+- **Syncing the Watch Next list** across devices, or sending it to Telegram.
 
 ## Known limitations
 
@@ -239,6 +246,7 @@ node --env-file=.env.local scripts/check-secrets.mjs            # run before eve
   - Upstash: free plan, with 500K commands a month.
 - **The cache is shared and lasts 6 hours.** The test page can show results up to 6 hours old (shown as “Last refreshed at”); everyone sees the same cached run.
 - **Rate limits are per IP address,** so people on the same network share them.
+- **The Watch Next list is per browser.** It is saved in that browser’s local storage, so it isn’t shared between devices or people. In a private window it lasts only until the window closes.
 - **Busy weeks span several Telegram messages.** Only WATCH titles are shown in full; SKIP titles are one line each.
 - **A Telegram send that fails halfway** may repeat the first messages when retried.
 

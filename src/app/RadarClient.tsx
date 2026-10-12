@@ -1,14 +1,15 @@
 "use client";
 // The interactive page: hero with this week's top pick, the two required
-// buttons, filters, poster grid, Telegram preview and "behind the scenes".
+// buttons, filters, poster grid with Watch Next hearts, and "behind the scenes".
 // Talks only to our own API routes; no API keys ever reach the browser.
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { GENRE_CHIPS, PLATFORMS, PREFS, SELECTED_PLATFORMS, UNKNOWN_GENRES, type PlatformId } from "@/lib/config";
-import { formatDigest } from "@/lib/digest";
 import type { DigestData, DigestTitle } from "@/lib/pipeline";
 import type { FridayRecord } from "@/lib/service";
 import styles from "./page.module.css";
 import TitleCard, { LANGUAGE_NAMES, PlatformBadge, lengthLabel } from "./TitleCard";
+import { ConfettiLayer, WatchNextButton, WatchNextPanel, makeBurst, type Burst } from "./WatchNext";
+import { isHearted, toggleHeart, useWatchNext } from "./watchNextStore";
 
 interface Props {
   initialData: DigestData | null;
@@ -25,10 +26,6 @@ const shortDate = (unix: number) => new Date(unix * 1000).toLocaleDateString("en
 
 const SOURCE_LABEL: Record<string, string> = { ok: "Worked", "saved-data": "Used saved data", failed: "Failed", skipped: "Not needed" };
 const SOURCE_TONE: Record<string, string> = { ok: "good", "saved-data": "warn", failed: "bad", skipped: "neutral" };
-
-// Our digest HTML only contains <b>, <i> and <a href="http(s)…"> built from escaped
-// text (src/lib/digest.ts). Links open in a new tab here.
-const forWeb = (html: string) => html.replace(/<a href=/g, '<a target="_blank" rel="noopener noreferrer" href=');
 
 async function postJson(url: string, body: unknown) {
   try {
@@ -61,7 +58,6 @@ type Verdict = "all" | "watch" | "skip";
 
 export default function RadarClient({ initialData, lastFriday, nextRun, cacheHours, info, loadError }: Props) {
   const [data, setData] = useState<DigestData | null>(initialData);
-  const [view, setView] = useState<"picks" | "telegram">("picks");
   const [previewState, setPreviewState] = useState<"idle" | "loading" | "error">("idle");
   const [previewError, setPreviewError] = useState("");
   const [fromCache, setFromCache] = useState(true);
@@ -79,6 +75,26 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
   const [verdict, setVerdict] = useState<Verdict>("all");
   const [genres, setGenres] = useState<string[]>([]);
   const [languages, setLanguages] = useState<string[]>([]);
+
+  // Watch Next: hearts, the floating box's glow, and confetti bursts.
+  const watchNext = useWatchNext();
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [glowKey, setGlowKey] = useState(0);
+  const [bursts, setBursts] = useState<Burst[]>([]);
+  const closePanel = useCallback(() => setPanelOpen(false), []);
+
+  function heart(t: DigestTitle, x: number, y: number): boolean {
+    const added = toggleHeart(t);
+    if (added) {
+      setGlowKey((k) => k + 1);
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const burst = makeBurst(x, y);
+        setBursts((b) => [...b, burst]);
+        setTimeout(() => setBursts((b) => b.filter((x) => x.id !== burst.id)), 1300);
+      }
+    }
+    return added;
+  }
 
   async function preview() {
     setPreviewState("loading");
@@ -133,11 +149,14 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
     set(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
 
   const top = titles.find((t) => t.verdict.verdict === "WATCH") ?? titles[0];
-  const messages = useMemo(() => (data ? formatDigest(data, { test: false }) : []), [data]);
   const loading = previewState === "loading";
 
   return (
     <main className={styles.page}>
+      <WatchNextButton open={panelOpen} onOpen={() => setPanelOpen(true)} glowKey={glowKey} />
+      {panelOpen && <WatchNextPanel onClose={closePanel} />}
+      <ConfettiLayer bursts={bursts} />
+
       {/* ------------------------------------------------------------ hero */}
       <section className={styles.hero} aria-labelledby="hero-title">
         {top?.backdrop && (
@@ -272,14 +291,7 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
 
       {/* ------------------------------------------------------------ picks */}
       <section id="picks" className={styles.content} aria-label="This week's titles">
-        <div className={styles.viewTabs} role="tablist" aria-label="View">
-          <button role="tab" aria-selected={view === "picks"} onClick={() => setView("picks")}>
-            Curated picks
-          </button>
-          <button role="tab" aria-selected={view === "telegram"} onClick={() => setView("telegram")}>
-            Telegram preview
-          </button>
-        </div>
+        <h2 className={styles.sectionTitle}>This week’s picks</h2>
 
         {!data && !loading && (
           <div className={styles.empty}>
@@ -295,7 +307,7 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
           </div>
         )}
 
-        {data && view === "picks" && (
+        {data && (
           <>
             <div className={styles.filters}>
               <div className={styles.platformTabs} role="group" aria-label="Platform">
@@ -346,7 +358,7 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
             {visible.length ? (
               <div className={styles.grid}>
                 {visible.map((t, i) => (
-                  <TitleCard key={t.id} t={t} index={i} limitedData={data.limitedData} />
+                  <TitleCard key={t.id} t={t} index={i} limitedData={data.limitedData} hearted={isHearted(watchNext, t.id)} onHeart={heart} />
                 ))}
               </div>
             ) : (
@@ -367,16 +379,6 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
           </>
         )}
 
-        {data && view === "telegram" && (
-          <div className={styles.telegram}>
-            <p className={styles.muted}>Exactly what the Friday digest posts to Telegram ({messages.length} message{messages.length === 1 ? "" : "s"}).</p>
-            <div className={styles.chat} aria-label="Digest as it appears in Telegram">
-              {messages.map((m, i) => (
-                <div key={i} className={styles.bubble} dangerouslySetInnerHTML={{ __html: forWeb(m) }} />
-              ))}
-            </div>
-          </div>
-        )}
       </section>
 
       {/* ------------------------------------------------------------ behind the scenes */}
