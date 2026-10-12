@@ -4,7 +4,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const NAMES = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TMDB_TOKEN", "RAPIDAPI_KEY", "GEMINI_API_KEY", "CRON_SECRET", "DEMO_PASSWORD", "VERCEL_OIDC_TOKEN", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN"];
+const NAMES = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TMDB_TOKEN", "RAPIDAPI_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "CRON_SECRET", "DEMO_PASSWORD", "VERCEL_OIDC_TOKEN", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN"];
 const secrets = NAMES.map((name) => [name, process.env[name] ?? ""]).filter(([, v]) => v.length >= 6);
 
 const ignored = execSync("git check-ignore .env.local || true", { encoding: "utf8" }).trim();

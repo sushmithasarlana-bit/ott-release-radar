@@ -9,7 +9,7 @@ const SECRET_NAMES = [
   "TELEGRAM_CHAT_ID",
   "TMDB_TOKEN",
   "RAPIDAPI_KEY",
-  "GEMINI_API_KEY",
+  "OPENROUTER_API_KEY",
   "CRON_SECRET",
   "DEMO_PASSWORD",
 ];
@@ -84,7 +84,7 @@ function stepEnv() {
           ? "this looks like the SHORT 'API Key' - we need the long 'API Read Access Token'"
           : "expected a long token starting with eyJ",
     RAPIDAPI_KEY: (v) => (v.length >= 40 ? "length looks right" : "seems short - double-check"),
-    GEMINI_API_KEY: (v) => (v.startsWith("AIza") ? "format looks right" : "unusual format (fine if the test works)"),
+    OPENROUTER_API_KEY: (v) => (v.startsWith("sk-or-") ? "format looks right" : "expected a key starting with sk-or-"),
     CRON_SECRET: (v) => (v.length >= 32 ? "generated" : "too short"),
     DEMO_PASSWORD: (v) => (v.length >= 8 ? "generated" : "too short"),
   };
@@ -271,50 +271,46 @@ async function stepTmdbDetails() {
 }
 
 // ---------------------------------------------------------------- gemini
+// Gemini is called through OpenRouter (openrouter.ai).
 async function stepGeminiModels() {
-  const key = need("GEMINI_API_KEY");
-  const models = [];
-  let pageToken = "";
-  do {
-    const r = await call("Gemini list models", `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ""}`, {
-      headers: { "x-goog-api-key": key },
-    });
-    if (!r.ok) fail("Gemini list models", r, "check GEMINI_API_KEY (create one at aistudio.google.com > Get API key).");
-    models.push(...(r.body.models ?? []));
-    pageToken = r.body.nextPageToken ?? "";
-  } while (pageToken);
-  const flash = models.filter((m) => /flash/i.test(m.name) && m.supportedGenerationMethods?.includes("generateContent"));
-  log(`✅ Gemini key works. ${models.length} models visible; ${flash.length} "Flash" models support generateContent:`);
-  for (const m of flash) log(`   ${m.name.padEnd(48)} ${m.displayName}  (in ${m.inputTokenLimit} / out ${m.outputTokenLimit} tokens)`);
-  await saveSample("gemini-models", models);
+  const key = need("OPENROUTER_API_KEY");
+  const r = await call("OpenRouter models", "https://openrouter.ai/api/v1/models");
+  if (!r.ok) fail("OpenRouter list models", r);
+  const flash = (r.body.data ?? []).filter((m) => /^google\/gemini.*flash/i.test(m.id));
+  log(`✅ OpenRouter lists ${flash.length} Gemini Flash models:`);
+  for (const m of flash) log(`   ${m.id}`);
+  const k = await call("OpenRouter key", "https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${key}` } });
+  if (!k.ok) fail("OpenRouter key check", k, "check OPENROUTER_API_KEY (openrouter.ai > Keys).");
+  log(`✅ Key works. Credit limit: ${k.body.data?.limit ?? "none"}, remaining: ${k.body.data?.limit_remaining ?? "?"}`);
 }
 
 async function stepGeminiTest(model) {
-  const key = need("GEMINI_API_KEY");
+  const key = need("OPENROUTER_API_KEY");
   if (!model) {
-    log("❌ Pass a model name from gemini-models, e.g. models/gemini-...-flash");
+    log("❌ Pass an OpenRouter model id, e.g. google/gemini-3.7-flash");
     process.exit(1);
   }
-  const name = model.startsWith("models/") ? model : `models/${model}`;
-  const r = await call("Gemini generateContent", `https://generativelanguage.googleapis.com/v1beta/${name}:generateContent`, {
+  const r = await call("OpenRouter chat", "https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "x-goog-api-key": key, "content-type": "application/json" },
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: 'Return JSON exactly like {"ok": true, "greeting": "<a five word greeting>"}' }] }],
-      generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+      model,
+      messages: [{ role: "user", content: 'Return JSON exactly like {"ok": true, "greeting": "<a five word greeting>"}' }],
+      temperature: 0.2,
+      reasoning: { effort: "low" },
+      response_format: { type: "json_object" },
     }),
   });
-  if (!r.ok) fail(`Gemini ${name}`, r);
-  const cand = r.body.candidates?.[0];
-  const text = cand?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-  log(`✅ ${name} answered in ${r.ms} ms (modelVersion=${r.body.modelVersion}, finishReason=${cand?.finishReason})`);
+  if (!r.ok || r.body.error) fail(`OpenRouter ${model}`, r);
+  const choice = r.body.choices?.[0];
+  const text = choice?.message?.content ?? "";
+  log(`✅ ${model} answered in ${r.ms} ms (served by ${r.body.model} via ${r.body.provider}, finish_reason=${choice?.finish_reason})`);
   log(`   Raw text: ${text}`);
   try {
     log(`   Parsed JSON OK: ${JSON.stringify(JSON.parse(text))}`);
   } catch {
     log("   ⚠️ Response was not valid JSON");
   }
-  log(`   Tokens used: ${JSON.stringify(r.body.usageMetadata)}`);
 }
 
 // ---------------------------------------------------------------- main

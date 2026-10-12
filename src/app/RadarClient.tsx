@@ -440,7 +440,7 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
                 <b>Filter.</b> Strictly Hindi, English or Tamil; loosely thriller, crime, mystery, sci-fi or drama.
               </li>
               <li>
-                <b>Verdict.</b> One Gemini Flash call ({info.geminiModels[0]}, backup {info.geminiModels[1]}) gives WATCH or SKIP, a score, a
+                <b>Verdict.</b> One Gemini Flash call via OpenRouter ({info.geminiModels[0]}, backup {info.geminiModels[1]}) gives WATCH or SKIP, a score, a
                 reason, and a 2-line synopsis written only from TMDB’s text.
               </li>
               <li>
@@ -457,7 +457,7 @@ export default function RadarClient({ initialData, lastFriday, nextRun, cacheHou
       </section>
 
       <footer className={styles.footer}>
-        Data: Streaming Availability API · TMDB (this product uses the TMDB API but is not endorsed or certified by TMDB) · Verdicts: Google Gemini
+        Data: Streaming Availability API · TMDB (this product uses the TMDB API but is not endorsed or certified by TMDB) · Verdicts: Google Gemini Flash (via OpenRouter)
       </footer>
     </main>
   );

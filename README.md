@@ -7,7 +7,7 @@ A weekly Telegram digest for **Naman**: the movies and TV shows that became avai
 | **Live site** | **https://ott-release-radar-iota.vercel.app** |
 | **Code** | https://github.com/sushmithasarlana-bit/ott-release-radar |
 | **Schedule** | Every Friday ~18:00 IST (Vercel cron `30 12 * * 5`), with a Saturday backup run |
-| **AI** | Google Gemini Flash only (`gemini-3.8-flash`, backup `gemini-3.5-flash`) |
+| **AI** | Google Gemini Flash only, called through [OpenRouter](https://openrouter.ai) (`google/gemini-3.7-flash`, backup `google/gemini-3.5-flash`). No Claude/Anthropic API anywhere. |
 
 ---
 
@@ -85,7 +85,7 @@ flowchart LR
 
     SA["Streaming Availability API<br/>(RapidAPI)<br/>what's new, where, since when, link"]
     TMDB["TMDB API<br/>language, genres, runtime,<br/>episodes, synopsis, poster"]
-    GEM["Gemini Flash<br/>one batched call:<br/>WATCH/SKIP, score, reason, synopsis"]
+    GEM["Gemini Flash via OpenRouter<br/>one batched call:<br/>WATCH/SKIP, score, reason, synopsis"]
     REDIS[("Upstash Redis<br/>saved week of changes, TMDB cache,<br/>6-hour digest cache, rate limits,<br/>once-per-week send marker")]
     TG["Telegram Bot API<br/>private channel"]
 
@@ -104,7 +104,7 @@ flowchart LR
 |---|---|---|
 | **Streaming Availability** (RapidAPI) | What became available, on which platform, since when, and the deep link | `src/lib/sources/streamingAvailability.ts`, `src/lib/changeLog.ts` |
 | **TMDB** | What the title is: original language, genres, runtime, episodes, synopsis, poster | `src/lib/sources/tmdb.ts`, `src/lib/enrich.ts` |
-| **Gemini Flash** | One batched call per run → JSON verdicts, validated | `src/lib/sources/gemini.ts` |
+| **Gemini Flash** (via OpenRouter) | One batched call per run → JSON verdicts, validated | `src/lib/sources/gemini.ts` |
 | **Upstash Redis** | Shared state between serverless runs | `src/lib/store.ts`, `src/lib/service.ts` |
 | **Telegram** | Delivery (HTML, link previews off, split under 4,096 chars) | `src/lib/sources/telegram.ts`, `src/lib/digest.ts` |
 | **Pipeline** | Ties it together and records counts, sources, notes and timings | `src/lib/pipeline.ts` |
@@ -124,7 +124,7 @@ flowchart LR
 4. **Filter, in our own code.**
    - **Strict:** platform, 7-day window, original language `hi` / `en` / `ta`.
    - **Loose genre:** Thriller, Crime, Mystery, Science Fiction / Sci-Fi & Fantasy, Drama. TMDB’s TV genres have no “Thriller”, so Crime and Mystery stand in for it.
-5. **Judge (Gemini Flash).**
+5. **Judge (Gemini Flash, via OpenRouter).**
    - **One call** with Naman’s preferences and every title’s details.
    - **Settings:** temperature 0.2, a strict JSON schema, and checks in code (WATCH = 6–10, SKIP = 1–5).
    - **Synopsis:** written only from TMDB’s text; “Synopsis unavailable” is decided by our code, not the model.
@@ -203,7 +203,7 @@ npm run dev                  # http://localhost:3000
 | `TELEGRAM_CHAT_ID` | Channel ID (`-100…`) |
 | `TMDB_TOKEN` | TMDB **API Read Access Token** |
 | `RAPIDAPI_KEY` | RapidAPI key subscribed to *Streaming Availability* |
-| `GEMINI_API_KEY` | Google AI Studio key |
+| `OPENROUTER_API_KEY` | OpenRouter key (openrouter.ai → Keys); used only to call Google Gemini Flash models |
 | `CRON_SECRET` | Random string (32+ characters) protecting `/api/cron` |
 | `DEMO_PASSWORD` | Password for the test-send button |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Added automatically by the Vercel ↔ Upstash integration. Without them, local runs store data in `.data/` |
@@ -242,7 +242,7 @@ node --env-file=.env.local scripts/check-secrets.mjs            # run before eve
 - **AI verdicts are judgement calls.** They can differ slightly between runs even at low temperature. Synopses are constrained to TMDB’s text, but that can’t be guaranteed word by word.
 - **Free-tier limits:**
   - RapidAPI: 1,000 requests a month (a refresh uses about 4; a week from scratch about 13).
-  - Gemini: free-tier rate limits.
+  - OpenRouter: each Gemini call is charged against the key's credit (check usage at openrouter.ai).
   - Upstash: free plan, with 500K commands a month.
 - **The cache is shared and lasts 6 hours.** The test page can show results up to 6 hours old (shown as “Last refreshed at”); everyone sees the same cached run.
 - **Rate limits are per IP address,** so people on the same network share them.
@@ -256,4 +256,4 @@ node --env-file=.env.local scripts/check-secrets.mjs            # run before eve
 
 Next.js 16 (App Router) on Vercel · TypeScript · Upstash Redis (REST) · no API SDKs (plain `fetch`).
 
-Data: [Streaming Availability API](https://www.movieofthenight.com/about/api) by Movie of the Night · [TMDB](https://www.themoviedb.org/). *This product uses the TMDB API but is not endorsed or certified by TMDB.* Verdicts: Google Gemini.
+Data: [Streaming Availability API](https://www.movieofthenight.com/about/api) by Movie of the Night · [TMDB](https://www.themoviedb.org/). *This product uses the TMDB API but is not endorsed or certified by TMDB.* Verdicts: Google Gemini Flash via OpenRouter.

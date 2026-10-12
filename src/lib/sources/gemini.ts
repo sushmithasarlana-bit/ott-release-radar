@@ -1,12 +1,15 @@
-// Gemini Flash: one batched "watch or skip" call per run.
+// Gemini Flash: one batched "watch or skip" call per run, through OpenRouter
+// (openrouter.ai), which forwards the request to Google's Gemini models.
 import { GENRE_NOTES, PREFS } from "../config";
 import type { Enriched } from "../enrich";
 import { env } from "../env";
 import { ApiError, getJson } from "../http";
 
-// Verified live on 2026-10-12. gemini-3.5-flash is the backup because it is
-// served by a different model (3.6) than the primary; 3.7 is an alias of 3.8.
-export const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash"] as const;
+// OpenRouter model IDs, both verified live on 2026-10-12 (structured JSON output
+// and reasoning effort supported, served by Google). The backup is only used if
+// the main model fails.
+export const GEMINI_MODELS = ["google/gemini-3.7-flash", "google/gemini-3.5-flash"] as const;
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const TIMEOUT_MS = 60_000;
 // Safety limit so one call stays fast; a normal week has ~20-50 titles.
 export const MAX_TITLES_PER_CALL = 80;
@@ -43,10 +46,12 @@ const RESPONSE_SCHEMA = {
           synopsis: { type: "string" },
         },
         required: ["id", "verdict", "score", "reason", "synopsis"],
+        additionalProperties: false,
       },
     },
   },
   required: ["items"],
+  additionalProperties: false,
 };
 
 function buildPrompt(titles: Enriched[]): string {
@@ -78,36 +83,40 @@ Titles (JSON):
 ${JSON.stringify(rows)}`;
 }
 
-interface GeminiResponse {
-  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
-  modelVersion?: string;
+interface OpenRouterResponse {
+  model?: string;
+  choices?: { finish_reason?: string; message?: { content?: string | null } }[];
+  error?: { message?: string; code?: number };
 }
 
 async function callModel(model: string, prompt: string): Promise<{ text: string; modelVersion: string }> {
-  const { data } = await getJson<GeminiResponse>(
+  const { data } = await getJson<OpenRouterResponse>(
     "Gemini",
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    OPENROUTER_URL,
     {
       method: "POST",
-      headers: { "x-goog-api-key": env("GEMINI_API_KEY"), "content-type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${env("OPENROUTER_API_KEY")}`,
+        "Content-Type": "application/json",
+        "X-Title": "OTT Release Radar",
+      },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 16384,
-          responseMimeType: "application/json",
-          responseJsonSchema: RESPONSE_SCHEMA,
-          thinkingConfig: { thinkingLevel: "low" },
-        },
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 16384,
+        reasoning: { effort: "low" },
+        response_format: { type: "json_schema", json_schema: { name: "verdicts", strict: true, schema: RESPONSE_SCHEMA } },
       }),
     },
     TIMEOUT_MS,
   );
-  const candidate = data.candidates?.[0];
-  if (candidate?.finishReason && candidate.finishReason !== "STOP")
-    throw new ApiError("Gemini", 200, `answer incomplete (finishReason ${candidate.finishReason})`);
-  const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-  return { text, modelVersion: data.modelVersion ?? model };
+  // OpenRouter can report a provider error inside a 200 response.
+  if (data.error) throw new ApiError("Gemini", data.error.code ?? 200, `OpenRouter: ${data.error.message ?? "unknown error"}`);
+  const choice = data.choices?.[0];
+  if (choice?.finish_reason && choice.finish_reason !== "stop")
+    throw new ApiError("Gemini", 200, `answer incomplete (finish_reason ${choice.finish_reason})`);
+  return { text: choice?.message?.content ?? "", modelVersion: data.model ?? model };
 }
 
 /** Parses and checks Gemini's JSON. Invalid items are skipped (they get "unavailable"). */

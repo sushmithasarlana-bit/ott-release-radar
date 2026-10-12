@@ -6,7 +6,7 @@ export type EnvName =
   | "TELEGRAM_CHAT_ID"
   | "TMDB_TOKEN"
   | "RAPIDAPI_KEY"
-  | "GEMINI_API_KEY"
+  | "OPENROUTER_API_KEY"
   | "CRON_SECRET"
   | "DEMO_PASSWORD";
 
