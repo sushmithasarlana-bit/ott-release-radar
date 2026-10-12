@@ -49,3 +49,7 @@ next-env.d.ts
 # local storage used during development (not committed)
 /.data
 
+
+# AI-assistant helper files added by the Vercel/Upstash CLI (not part of the app)
+/.agents
+/.claude
